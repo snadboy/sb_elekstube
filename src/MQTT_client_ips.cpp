@@ -43,6 +43,11 @@ WiFiClient espClient;
 #endif
 
 extern char UniqueDeviceName[32];
+extern double GeoLocTZoffset;
+extern String GeoLocTZname;
+extern bool GeoLocIsDST;
+extern bool GeoLocEnabled;
+extern Clock uclock;
 
 // Initialize the MQTT client.
 PubSubClient MQTTclient(espClient);
@@ -100,6 +105,11 @@ bool MQTTCommandStateReceived = false;
 #define TopicPulse "pulse_bpm"
 #define TopicBreath "breath_bpm"
 #define TopicRainbow "rainbow_duration"
+#define TopicTZOffset "tz_offset"
+#define TopicTZName "tz_name"
+#define TopicGeoDST "geo_dst_active"
+#define TopicGeoEnabled "geo_dst_enabled"
+#define TopicLastNTP "last_ntp_sync"
 #endif
 
 bool MQTTCommandMainPower = true;
@@ -398,6 +408,33 @@ void MQTTReportState(bool forceUpdateEverything)
     }
   }
 #endif
+  // --- SB Custom: Report timezone, DST, and NTP sync sensors ---
+  {
+    // Timezone offset (e.g. -5.0)
+    char tzOffsetStr[16];
+    snprintf(tzOffsetStr, sizeof(tzOffsetStr), "%.1f", GeoLocTZoffset);
+    MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicTZOffset, "", ""), tzOffsetStr, MQTT_RETAIN_STATE_MESSAGES);
+
+    // Timezone name (e.g. America/Chicago)
+    MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicTZName, "", ""), GeoLocTZname.c_str(), MQTT_RETAIN_STATE_MESSAGES);
+
+    // DST enabled (geolocation is active)
+    MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicGeoEnabled, "", ""), GeoLocEnabled ? "ON" : "OFF", MQTT_RETAIN_STATE_MESSAGES);
+
+    // DST in effect
+    MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicGeoDST, "", ""), GeoLocIsDST ? "ON" : "OFF", MQTT_RETAIN_STATE_MESSAGES);
+
+    // Last NTP sync
+    time_t lastSync = Clock::getLastNtpSync();
+    if (lastSync > 0) {
+      char syncBuf[32];
+      snprintf(syncBuf, sizeof(syncBuf), "%lu", (unsigned long)lastSync);
+      MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicLastNTP, "", ""), syncBuf, MQTT_RETAIN_STATE_MESSAGES);
+    } else {
+      MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicLastNTP, "", ""), "0", MQTT_RETAIN_STATE_MESSAGES);
+    }
+  }
+  // --- End SB Custom ---
 }
 
 #ifdef MQTT_USE_TLS
@@ -1208,6 +1245,125 @@ bool MQTTReportDiscovery()
   if (!MQTTPublish(concat7_into(outbuf, "homeassistant/number/", UniqueDeviceName, "/", TopicRainbow, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
     return false;
 
+
+  // --- SB Custom: Timezone Offset Sensor ---
+  discovery.clear();
+  discovery["device"]["identifiers"][0] = UniqueDeviceName;
+  discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
+  discovery["device"]["model"] = DEVICE_MODEL;
+  discovery["device"]["name"] = DeviceNameForHA;
+  discovery["device"]["sw_version"] = FIRMWARE_VERSION;
+  discovery["device"]["hw_version"] = DEVICE_HW_VERSION;
+  discovery["device"]["connections"][0][0] = "mac";
+  discovery["device"]["connections"][0][1] = WiFi.macAddress();
+  discovery["unique_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicTZOffset, "", "", "", "");
+  discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicTZOffset, "", "", "", "");
+  discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
+  discovery["entity_category"] = "diagnostic";
+  discovery["name"] = "Timezone Offset";
+  discovery["icon"] = "mdi:map-clock";
+  discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicTZOffset, "", "");
+  discovery["unit_of_measurement"] = "h";
+
+  delay(150);
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/sensor/", UniqueDeviceName, "/", TopicTZOffset, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+    return false;
+
+  // --- SB Custom: Timezone Name Sensor ---
+  discovery.clear();
+  discovery["device"]["identifiers"][0] = UniqueDeviceName;
+  discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
+  discovery["device"]["model"] = DEVICE_MODEL;
+  discovery["device"]["name"] = DeviceNameForHA;
+  discovery["device"]["sw_version"] = FIRMWARE_VERSION;
+  discovery["device"]["hw_version"] = DEVICE_HW_VERSION;
+  discovery["device"]["connections"][0][0] = "mac";
+  discovery["device"]["connections"][0][1] = WiFi.macAddress();
+  discovery["unique_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicTZName, "", "", "", "");
+  discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicTZName, "", "", "", "");
+  discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
+  discovery["entity_category"] = "diagnostic";
+  discovery["name"] = "Timezone Name";
+  discovery["icon"] = "mdi:earth";
+  discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicTZName, "", "");
+
+  delay(150);
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/sensor/", UniqueDeviceName, "/", TopicTZName, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+    return false;
+
+  // --- SB Custom: Automatic DST Enabled (binary sensor) ---
+  discovery.clear();
+  discovery["device"]["identifiers"][0] = UniqueDeviceName;
+  discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
+  discovery["device"]["model"] = DEVICE_MODEL;
+  discovery["device"]["name"] = DeviceNameForHA;
+  discovery["device"]["sw_version"] = FIRMWARE_VERSION;
+  discovery["device"]["hw_version"] = DEVICE_HW_VERSION;
+  discovery["device"]["connections"][0][0] = "mac";
+  discovery["device"]["connections"][0][1] = WiFi.macAddress();
+  discovery["unique_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicGeoEnabled, "", "", "", "");
+  discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicGeoEnabled, "", "", "", "");
+  discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
+  discovery["entity_category"] = "diagnostic";
+  discovery["name"] = "Automatic DST";
+  discovery["icon"] = "mdi:sun-clock";
+  discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicGeoEnabled, "", "");
+  discovery["payload_on"] = "ON";
+  discovery["payload_off"] = "OFF";
+
+  delay(150);
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/binary_sensor/", UniqueDeviceName, "/", TopicGeoEnabled, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+    return false;
+
+  // --- SB Custom: DST In Effect (binary sensor) ---
+  discovery.clear();
+  discovery["device"]["identifiers"][0] = UniqueDeviceName;
+  discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
+  discovery["device"]["model"] = DEVICE_MODEL;
+  discovery["device"]["name"] = DeviceNameForHA;
+  discovery["device"]["sw_version"] = FIRMWARE_VERSION;
+  discovery["device"]["hw_version"] = DEVICE_HW_VERSION;
+  discovery["device"]["connections"][0][0] = "mac";
+  discovery["device"]["connections"][0][1] = WiFi.macAddress();
+  discovery["unique_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicGeoDST, "", "", "", "");
+  discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicGeoDST, "", "", "", "");
+  discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
+  discovery["entity_category"] = "diagnostic";
+  discovery["name"] = "DST In Effect";
+  discovery["icon"] = "mdi:weather-sunny-alert";
+  discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicGeoDST, "", "");
+  discovery["payload_on"] = "ON";
+  discovery["payload_off"] = "OFF";
+
+  delay(150);
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/binary_sensor/", UniqueDeviceName, "/", TopicGeoDST, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+    return false;
+
+  // --- SB Custom: Last NTP Sync Sensor ---
+  discovery.clear();
+  discovery["device"]["identifiers"][0] = UniqueDeviceName;
+  discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
+  discovery["device"]["model"] = DEVICE_MODEL;
+  discovery["device"]["name"] = DeviceNameForHA;
+  discovery["device"]["sw_version"] = FIRMWARE_VERSION;
+  discovery["device"]["hw_version"] = DEVICE_HW_VERSION;
+  discovery["device"]["connections"][0][0] = "mac";
+  discovery["device"]["connections"][0][1] = WiFi.macAddress();
+  discovery["unique_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicLastNTP, "", "", "", "");
+  discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicLastNTP, "", "", "", "");
+  discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
+  discovery["entity_category"] = "diagnostic";
+  discovery["name"] = "Last NTP Sync";
+  discovery["icon"] = "mdi:clock-check";
+  discovery["device_class"] = "timestamp";
+  discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicLastNTP, "", "");
+  discovery["value_template"] = "{{ value | int | timestamp_utc }}";
+
+  delay(150);
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/sensor/", UniqueDeviceName, "/", TopicLastNTP, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+    return false;
+
+  // --- End SB Custom ---
   discovery.clear();
   delay(120);
   MQTTReportAvailability(MQTT_ALIVE_MSG_ONLINE); // Publish online status

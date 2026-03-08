@@ -31,6 +31,7 @@ public:
   static void handleNtpFailure();
   static void updateNtpInterval();
   static uint32_t getCurrentNtpInterval() { return current_ntp_interval_ms; }
+static time_t getLastNtpSync() { return last_successful_ntp_sync; }
 
   // Set preferred hour format. true = 12hr, false = 24hr
   void setTwelveHour(bool th) { config->twelve_hour = th; }
@@ -112,6 +113,7 @@ private:
   static WiFiUDP ntpUDP;
   static NTPClient ntpTimeClient;
   static uint32_t millis_last_ntp;
+static time_t last_successful_ntp_sync;
 
   // Adaptive NTP sync intervals
   static uint32_t current_ntp_interval_ms;

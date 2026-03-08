@@ -34,3 +34,6 @@ include/_USER_DEFINES.h
 .act_artifacts
 .actrc
 .act
+
+# Firmware backups
+*.bin

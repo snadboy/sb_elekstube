@@ -149,6 +149,7 @@ StoredConfig stored_config;
 
 #ifdef GEOLOCATION_ENABLED
 double GeoLocTZoffset = 0;
+String GeoLocTZname = "";bool GeoLocIsDST = false;bool GeoLocEnabled = true;
 bool GetGeoLocationTimeZoneOffset();
 constexpr uint8_t GEOLOC_MAX_FAILURES_PER_DAY = 4;
 constexpr uint32_t GEOLOC_RETRY_BACKOFF_MS = 5UL * 60UL * 1000UL;
@@ -999,6 +1000,8 @@ bool GetGeoLocationTimeZoneOffset()
     }
 
     GeoLocTZoffset = static_cast<double>(newOffsetSeconds) / 3600.0;
+    GeoLocTZname = ipg.tz;
+    GeoLocIsDST = ipg.is_dst;
     Serial.println(String("Geo TZ Offset (applied): ") + String(GeoLocTZoffset));
     return true;
   }

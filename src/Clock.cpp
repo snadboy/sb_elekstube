@@ -245,6 +245,7 @@ void RtcSet(uint32_t tt)
 
 // Global variables for clock/NTP client
 uint32_t Clock::millis_last_ntp = 0;
+time_t Clock::last_successful_ntp_sync = 0;
 WiFiUDP Clock::ntpUDP;
 NTPClient Clock::ntpTimeClient(ntpUDP, NTP_SERVER, 0, NTP_UPDATE_INTERVAL);
 
@@ -363,6 +364,7 @@ time_t Clock::syncProvider()
           return rtc_now;
         }
         millis_last_ntp = millis(); // Store the last time we tried to get NTP time
+        last_successful_ntp_sync = ntp_now;
         handleNtpSuccess();         // Update adaptive timing
 
         Serial.println("Using NTP time!");
