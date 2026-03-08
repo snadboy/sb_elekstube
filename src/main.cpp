@@ -1003,7 +1003,29 @@ bool GetGeoLocationTimeZoneOffset()
 
     GeoLocTZoffset = static_cast<double>(newOffsetSeconds) / 3600.0;
     GeoLocTZname = ipg.tz;
-    GeoLocIsDST = ipg.is_dst;
+
+    // IP-API no longer returns the 'dst' field, so derive DST status by
+    // comparing the returned offset (which includes DST) against the
+    // standard (non-DST) offset for the timezone.  The ESP32 POSIX TZ
+    // database isn't available, so we use a lookup for common US zones.
+    // Fallback: treat the API value (defaults to false when missing).
+    struct StdOffset { const char *tz; int stdSeconds; };
+    static const StdOffset knownZones[] = {
+      {"America/New_York",    -18000},  // EST = -5h
+      {"America/Chicago",     -21600},  // CST = -6h
+      {"America/Denver",      -25200},  // MST = -7h
+      {"America/Los_Angeles", -28800},  // PST = -8h
+      {"America/Anchorage",   -32400},  // AKST = -9h
+      {"Pacific/Honolulu",    -36000},  // HST = -10h (no DST)
+    };
+    bool dstDerived = ipg.is_dst;  // fallback to API value
+    for (const auto &z : knownZones) {
+      if (ipg.tz == z.tz) {
+        dstDerived = (newOffsetSeconds != z.stdSeconds);
+        break;
+      }
+    }
+    GeoLocIsDST = dstDerived;
     Serial.println(String("Geo TZ Offset (applied): ") + String(GeoLocTZoffset));
     return true;
   }
