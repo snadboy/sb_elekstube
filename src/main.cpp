@@ -149,7 +149,9 @@ StoredConfig stored_config;
 
 #ifdef GEOLOCATION_ENABLED
 double GeoLocTZoffset = 0;
-String GeoLocTZname = "";bool GeoLocIsDST = false;bool GeoLocEnabled = true;
+String GeoLocTZname = "";
+bool GeoLocIsDST = false;
+bool GeoLocEnabled = true;
 bool GetGeoLocationTimeZoneOffset();
 constexpr uint8_t GEOLOC_MAX_FAILURES_PER_DAY = 4;
 constexpr uint32_t GEOLOC_RETRY_BACKOFF_MS = 5UL * 60UL * 1000UL;
