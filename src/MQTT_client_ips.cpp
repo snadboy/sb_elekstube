@@ -1291,7 +1291,7 @@ bool MQTTReportDiscovery()
   if (!MQTTPublish(concat7_into(outbuf, "homeassistant/sensor/", UniqueDeviceName, "/", TopicTZName, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
     return false;
 
-  // --- SB Custom: Automatic DST Enabled (binary sensor) ---
+  // --- SB Custom: Automatic DST Enabled ---
   discovery.clear();
   discovery["device"]["identifiers"][0] = UniqueDeviceName;
   discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
@@ -1308,14 +1308,12 @@ bool MQTTReportDiscovery()
   discovery["name"] = "Automatic DST";
   discovery["icon"] = "mdi:sun-clock";
   discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicGeoEnabled, "", "");
-  discovery["payload_on"] = "ON";
-  discovery["payload_off"] = "OFF";
 
   delay(150);
-  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/binary_sensor/", UniqueDeviceName, "/", TopicGeoEnabled, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/sensor/", UniqueDeviceName, "/", TopicGeoEnabled, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
     return false;
 
-  // --- SB Custom: DST In Effect (binary sensor) ---
+  // --- SB Custom: DST In Effect ---
   discovery.clear();
   discovery["device"]["identifiers"][0] = UniqueDeviceName;
   discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
@@ -1332,11 +1330,9 @@ bool MQTTReportDiscovery()
   discovery["name"] = "DST In Effect";
   discovery["icon"] = "mdi:weather-sunny-alert";
   discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicGeoDST, "", "");
-  discovery["payload_on"] = "ON";
-  discovery["payload_off"] = "OFF";
 
   delay(150);
-  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/binary_sensor/", UniqueDeviceName, "/", TopicGeoDST, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/sensor/", UniqueDeviceName, "/", TopicGeoDST, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
     return false;
 
   // --- SB Custom: Last NTP Sync Sensor ---
