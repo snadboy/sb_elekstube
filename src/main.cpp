@@ -319,6 +319,20 @@ void setup()
   }
 #endif
 
+#ifdef DIMMING
+  // Initialize dimming config from NVS or set defaults
+  if (stored_config.config.dimming.is_valid != StoredConfig::valid)
+  {
+    Serial.println("Dimming config invalid, using defaults.");
+    stored_config.config.dimming.enabled = true;
+    stored_config.config.dimming.night_intensity = TFT_DIMMED_INTENSITY;
+    stored_config.config.dimming.night_start_hour = NIGHT_TIME;
+    stored_config.config.dimming.day_start_hour = DAY_TIME;
+    stored_config.config.dimming.is_valid = StoredConfig::valid;
+    stored_config.save();
+  }
+#endif
+
   if (uclock.getActiveGraphicIdx() > tfts.NumberOfClockFaces)
   {
     uclock.setActiveGraphicIdx(tfts.NumberOfClockFaces);
@@ -378,7 +392,14 @@ void loop()
       MQTTCommandBlankZeroHoursReceived ||
       MQTTCommandPulseBpmReceived ||
       MQTTCommandBreathBpmReceived ||
-      MQTTCommandRainbowSecReceived;
+      MQTTCommandRainbowSecReceived
+#ifdef DIMMING
+      || MQTTCommandDimEnabledReceived
+      || MQTTCommandDimIntensityReceived
+      || MQTTCommandNightHourReceived
+      || MQTTCommandDayHourReceived
+#endif
+      ;
 
   if (MQTTCommandMainPowerReceived)
   {
@@ -542,6 +563,51 @@ void loop()
     backlights.setRainbowDuration(MQTTCommandRainbowSec);
   }
 
+#ifdef DIMMING
+  if (MQTTCommandDimEnabledReceived)
+  {
+    MQTTCommandDimEnabledReceived = false;
+    stored_config.config.dimming.enabled = MQTTCommandDimEnabled;
+    if (!MQTTCommandDimEnabled)
+    {
+      // When disabling auto-dimming, restore full brightness
+      tfts.dimming = 255;
+      tfts.ProcessUpdatedDimming();
+      backlights.setDimming(false);
+      updateClockDisplay(TFTs::force);
+    }
+    else
+    {
+      hour_old = 255; // Force re-evaluation on next check
+      checkDimmingNeeded();
+    }
+  }
+
+  if (MQTTCommandDimIntensityReceived)
+  {
+    MQTTCommandDimIntensityReceived = false;
+    stored_config.config.dimming.night_intensity = MQTTCommandDimIntensity;
+    hour_old = 255; // Force re-evaluation
+    checkDimmingNeeded();
+  }
+
+  if (MQTTCommandNightHourReceived)
+  {
+    MQTTCommandNightHourReceived = false;
+    stored_config.config.dimming.night_start_hour = MQTTCommandNightHour;
+    hour_old = 255;
+    checkDimmingNeeded();
+  }
+
+  if (MQTTCommandDayHourReceived)
+  {
+    MQTTCommandDayHourReceived = false;
+    stored_config.config.dimming.day_start_hour = MQTTCommandDayHour;
+    hour_old = 255;
+    checkDimmingNeeded();
+  }
+#endif // DIMMING
+
   MQTTStatusMainPower = tfts.isEnabled();
   MQTTStatusBackPower = backlights.getPower();
   MQTTStatusState = (uclock.getActiveGraphicIdx() + 1) * 5; // 10
@@ -559,6 +625,13 @@ void loop()
   MQTTStatusPulseBpm = backlights.getPulseRate();
   MQTTStatusBreathBpm = backlights.getBreathRate();
   MQTTStatusRainbowSec = backlights.getRainbowDuration();
+
+#ifdef DIMMING
+  MQTTStatusDimEnabled = stored_config.config.dimming.enabled;
+  MQTTStatusDimIntensity = stored_config.config.dimming.night_intensity;
+  MQTTStatusNightHour = stored_config.config.dimming.night_start_hour;
+  MQTTStatusDayHour = stored_config.config.dimming.day_start_hour;
+#endif
 
   if (MQTTCommandReceived)
   {
@@ -900,19 +973,24 @@ void setupMenu()
 
 #ifdef DIMMING
 bool isNightTime(uint8_t current_hour)
-{ // check the actual hour is in the defined "night time"
-  if (DAY_TIME < NIGHT_TIME)
+{ // check the actual hour is in the defined "night time" using runtime config
+  uint8_t nightStart = stored_config.config.dimming.night_start_hour;
+  uint8_t dayStart = stored_config.config.dimming.day_start_hour;
+  if (dayStart < nightStart)
   { // "Night" spans across midnight so it is split between two days
-    return (current_hour < DAY_TIME) || (current_hour >= NIGHT_TIME);
+    return (current_hour < dayStart) || (current_hour >= nightStart);
   }
   else
   { // "Night" starts after midnight, entirely contained within the current day
-    return (current_hour >= NIGHT_TIME) && (current_hour < DAY_TIME);
+    return (current_hour >= nightStart) && (current_hour < dayStart);
   }
 }
 
 void checkDimmingNeeded()
 {                                             // dim the display in the defined night time
+  if (!stored_config.config.dimming.enabled)
+    return; // Skip auto-dimming when disabled via HA
+
   uint8_t current_hour = uclock.getHour24();  // for internal calcs we always use 24h format
   isDimmingNeeded = current_hour != hour_old; // check, if the hour has changed since last loop (from time passing by or from timezone change)
   if (isDimmingNeeded)
@@ -920,13 +998,13 @@ void checkDimmingNeeded()
     Serial.print("Current hour = ");
     Serial.print(current_hour);
     Serial.print(", Night Time Start = ");
-    Serial.print(NIGHT_TIME);
+    Serial.print(stored_config.config.dimming.night_start_hour);
     Serial.print(", Day Time Start = ");
-    Serial.println(DAY_TIME);
+    Serial.println(stored_config.config.dimming.day_start_hour);
     if (isNightTime(current_hour))
     { // check if it is in the defined night time
       Serial.println("Set to night time mode (dimmed)!");
-      tfts.dimming = TFT_DIMMED_INTENSITY;
+      tfts.dimming = stored_config.config.dimming.night_intensity;
       tfts.ProcessUpdatedDimming();
       backlights.setDimming(true);
     }

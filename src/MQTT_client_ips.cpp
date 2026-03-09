@@ -110,6 +110,12 @@ bool MQTTCommandStateReceived = false;
 #define TopicGeoDST "geo_dst_active"
 #define TopicGeoEnabled "geo_dst_enabled"
 #define TopicLastNTP "last_ntp_sync"
+#ifdef DIMMING
+#define TopicDimEnabled "dim_enabled"
+#define TopicDimIntensity "dim_intensity"
+#define TopicNightHour "night_hour"
+#define TopicDayHour "day_hour"
+#endif
 #endif
 
 bool MQTTCommandMainPower = true;
@@ -150,6 +156,17 @@ bool MQTTCommandBreathBpmReceived = false;
 float MQTTCommandRainbowSec = -1;
 bool MQTTCommandRainbowSecReceived = false;
 
+#ifdef DIMMING
+bool MQTTCommandDimEnabled = true;
+bool MQTTCommandDimEnabledReceived = false;
+uint8_t MQTTCommandDimIntensity = TFT_DIMMED_INTENSITY;
+bool MQTTCommandDimIntensityReceived = false;
+uint8_t MQTTCommandNightHour = NIGHT_TIME;
+bool MQTTCommandNightHourReceived = false;
+uint8_t MQTTCommandDayHour = DAY_TIME;
+bool MQTTCommandDayHourReceived = false;
+#endif
+
 // Status to server for Home Assistant.
 bool MQTTStatusMainPower = true;
 bool MQTTStatusBackPower = true;
@@ -186,6 +203,17 @@ bool LastSentBlankZeroHours = false;
 uint8_t LastSentPulseBpm = -1;
 uint8_t LastSentBreathBpm = -1;
 float LastSentRainbowSec = -1;
+
+#ifdef DIMMING
+bool MQTTStatusDimEnabled = true;
+uint8_t MQTTStatusDimIntensity = TFT_DIMMED_INTENSITY;
+uint8_t MQTTStatusNightHour = NIGHT_TIME;
+uint8_t MQTTStatusDayHour = DAY_TIME;
+int LastSentDimEnabled = -1;
+int LastSentDimIntensity = -1;
+int LastSentNightHour = -1;
+int LastSentDayHour = -1;
+#endif
 
 // Plain MQTT.
 int LastSentSignalLevel = 999;
@@ -434,6 +462,36 @@ void MQTTReportState(bool forceUpdateEverything)
       MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicLastNTP, "", ""), "0", MQTT_RETAIN_STATE_MESSAGES);
     }
   }
+
+#ifdef DIMMING
+  // --- SB Custom: Report dimming settings ---
+  if (forceUpdateEverything || (int)MQTTStatusDimEnabled != LastSentDimEnabled)
+  {
+    MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimEnabled, "", ""), MQTTStatusDimEnabled ? MQTT_STATE_ON : MQTT_STATE_OFF, MQTT_RETAIN_STATE_MESSAGES);
+    LastSentDimEnabled = MQTTStatusDimEnabled;
+  }
+  if (forceUpdateEverything || MQTTStatusDimIntensity != LastSentDimIntensity)
+  {
+    JsonDocument state;
+    state["state"] = MQTTStatusDimIntensity;
+    if (MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimIntensity, "", ""), &state, MQTT_RETAIN_STATE_MESSAGES))
+      LastSentDimIntensity = MQTTStatusDimIntensity;
+  }
+  if (forceUpdateEverything || MQTTStatusNightHour != LastSentNightHour)
+  {
+    JsonDocument state;
+    state["state"] = MQTTStatusNightHour;
+    if (MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicNightHour, "", ""), &state, MQTT_RETAIN_STATE_MESSAGES))
+      LastSentNightHour = MQTTStatusNightHour;
+  }
+  if (forceUpdateEverything || MQTTStatusDayHour != LastSentDayHour)
+  {
+    JsonDocument state;
+    state["state"] = MQTTStatusDayHour;
+    if (MQTTPublish(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDayHour, "", ""), &state, MQTT_RETAIN_STATE_MESSAGES))
+      LastSentDayHour = MQTTStatusDayHour;
+  }
+#endif // DIMMING
   // --- End SB Custom ---
 }
 
@@ -570,6 +628,12 @@ bool MQTTStart(bool restart)
     MQTTclient.subscribe(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicBreath, "/set", ""));
     MQTTclient.subscribe(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicPulse, "/set", ""));
     MQTTclient.subscribe(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicRainbow, "/set", ""));
+#ifdef DIMMING
+    MQTTclient.subscribe(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimEnabled, "/set", ""));
+    MQTTclient.subscribe(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimIntensity, "/set", ""));
+    MQTTclient.subscribe(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicNightHour, "/set", ""));
+    MQTTclient.subscribe(concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDayHour, "/set", ""));
+#endif
 #ifdef DEBUG_OUTPUT_MQTT
     Serial.println("DEBUG: subscribed to topics: ");
     Serial.printf("%s/%s/%s/set\n", MQTT_ROOT_TOPIC, UniqueDeviceName, TopicFront);
@@ -846,6 +910,52 @@ void MQTTCallback(char *topic, byte *payload, unsigned int length)
                     MQTTCommandRainbowSecReceived = true;
                   }
                 }
+#ifdef DIMMING
+                else if (strcmp(topic, concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimEnabled, "/set", "")) == 0)
+                {
+                  JsonDocument doc;
+                  DeserializationError err = deserializeJson(doc, payload, length);
+                  if (err) { Serial.print("WARNING: JSON error in dim_enabled/set: "); Serial.println(err.c_str()); return; }
+                  if (doc["state"].is<const char *>())
+                  {
+                    MQTTCommandDimEnabled = (strcmp(doc["state"].as<const char *>(), MQTT_STATE_ON) == 0);
+                    MQTTCommandDimEnabledReceived = true;
+                  }
+                }
+                else if (strcmp(topic, concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimIntensity, "/set", "")) == 0)
+                {
+                  JsonDocument doc;
+                  DeserializationError err = deserializeJson(doc, payload, length);
+                  if (err) { Serial.print("WARNING: JSON error in dim_intensity/set: "); Serial.println(err.c_str()); return; }
+                  if (doc["state"].is<int>())
+                  {
+                    MQTTCommandDimIntensity = doc["state"];
+                    MQTTCommandDimIntensityReceived = true;
+                  }
+                }
+                else if (strcmp(topic, concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicNightHour, "/set", "")) == 0)
+                {
+                  JsonDocument doc;
+                  DeserializationError err = deserializeJson(doc, payload, length);
+                  if (err) { Serial.print("WARNING: JSON error in night_hour/set: "); Serial.println(err.c_str()); return; }
+                  if (doc["state"].is<int>())
+                  {
+                    MQTTCommandNightHour = doc["state"];
+                    MQTTCommandNightHourReceived = true;
+                  }
+                }
+                else if (strcmp(topic, concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDayHour, "/set", "")) == 0)
+                {
+                  JsonDocument doc;
+                  DeserializationError err = deserializeJson(doc, payload, length);
+                  if (err) { Serial.print("WARNING: JSON error in day_hour/set: "); Serial.println(err.c_str()); return; }
+                  if (doc["state"].is<int>())
+                  {
+                    MQTTCommandDayHour = doc["state"];
+                    MQTTCommandDayHourReceived = true;
+                  }
+                }
+#endif // DIMMING
                 else
                 {
                   Serial.print("WARNING: Unhandled MQTT topic: ");
@@ -1358,6 +1468,125 @@ bool MQTTReportDiscovery()
   delay(150);
   if (!MQTTPublish(concat7_into(outbuf, "homeassistant/sensor/", UniqueDeviceName, "/", TopicLastNTP, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
     return false;
+
+  // --- SB Custom: Night Dimming Switch ---
+#ifdef DIMMING
+  discovery.clear();
+  discovery["device"]["identifiers"][0] = UniqueDeviceName;
+  discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
+  discovery["device"]["model"] = DEVICE_MODEL;
+  discovery["device"]["name"] = DeviceNameForHA;
+  discovery["device"]["sw_version"] = FIRMWARE_VERSION;
+  discovery["device"]["hw_version"] = DEVICE_HW_VERSION;
+  discovery["device"]["connections"][0][0] = "mac";
+  discovery["device"]["connections"][0][1] = WiFi.macAddress();
+  discovery["unique_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicDimEnabled, "", "", "", "");
+  discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicDimEnabled, "", "", "", "");
+  discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
+  discovery["entity_category"] = "config";
+  discovery["name"] = "Night Dimming";
+  discovery["icon"] = "mdi:brightness-auto";
+  discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimEnabled, "", "");
+  discovery["command_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimEnabled, "/set", "");
+  discovery["payload_on"] = MQTT_STATE_ON;
+  discovery["payload_off"] = MQTT_STATE_OFF;
+  discovery["state_on"] = MQTT_STATE_ON;
+  discovery["state_off"] = MQTT_STATE_OFF;
+  discovery["command_template"] = "{\"state\":\"{{ value }}\"}";
+
+  delay(150);
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/switch/", UniqueDeviceName, "/", TopicDimEnabled, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+    return false;
+
+  // --- SB Custom: Night Brightness Number ---
+  discovery.clear();
+  discovery["device"]["identifiers"][0] = UniqueDeviceName;
+  discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
+  discovery["device"]["model"] = DEVICE_MODEL;
+  discovery["device"]["name"] = DeviceNameForHA;
+  discovery["device"]["sw_version"] = FIRMWARE_VERSION;
+  discovery["device"]["hw_version"] = DEVICE_HW_VERSION;
+  discovery["device"]["connections"][0][0] = "mac";
+  discovery["device"]["connections"][0][1] = WiFi.macAddress();
+  discovery["unique_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicDimIntensity, "", "", "", "");
+  discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicDimIntensity, "", "", "", "");
+  discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
+  discovery["entity_category"] = "config";
+  discovery["name"] = "Night Brightness";
+  discovery["icon"] = "mdi:brightness-6";
+  discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimIntensity, "", "");
+  discovery["command_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDimIntensity, "/set", "");
+  discovery["command_template"] = "{\"state\":{{value}}}";
+  discovery["value_template"] = "{{ value_json.state }}";
+  discovery["min"] = 0;
+  discovery["max"] = 255;
+  discovery["step"] = 1;
+  discovery["mode"] = "slider";
+
+  delay(150);
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/number/", UniqueDeviceName, "/", TopicDimIntensity, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+    return false;
+
+  // --- SB Custom: Night Start Hour Number ---
+  discovery.clear();
+  discovery["device"]["identifiers"][0] = UniqueDeviceName;
+  discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
+  discovery["device"]["model"] = DEVICE_MODEL;
+  discovery["device"]["name"] = DeviceNameForHA;
+  discovery["device"]["sw_version"] = FIRMWARE_VERSION;
+  discovery["device"]["hw_version"] = DEVICE_HW_VERSION;
+  discovery["device"]["connections"][0][0] = "mac";
+  discovery["device"]["connections"][0][1] = WiFi.macAddress();
+  discovery["unique_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicNightHour, "", "", "", "");
+  discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicNightHour, "", "", "", "");
+  discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
+  discovery["entity_category"] = "config";
+  discovery["name"] = "Night Start Hour";
+  discovery["icon"] = "mdi:weather-night";
+  discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicNightHour, "", "");
+  discovery["command_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicNightHour, "/set", "");
+  discovery["command_template"] = "{\"state\":{{value}}}";
+  discovery["value_template"] = "{{ value_json.state }}";
+  discovery["min"] = 0;
+  discovery["max"] = 23;
+  discovery["step"] = 1;
+  discovery["mode"] = "slider";
+  discovery["unit_of_measurement"] = "h";
+
+  delay(150);
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/number/", UniqueDeviceName, "/", TopicNightHour, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+    return false;
+
+  // --- SB Custom: Day Start Hour Number ---
+  discovery.clear();
+  discovery["device"]["identifiers"][0] = UniqueDeviceName;
+  discovery["device"]["manufacturer"] = DEVICE_MANUFACTURER;
+  discovery["device"]["model"] = DEVICE_MODEL;
+  discovery["device"]["name"] = DeviceNameForHA;
+  discovery["device"]["sw_version"] = FIRMWARE_VERSION;
+  discovery["device"]["hw_version"] = DEVICE_HW_VERSION;
+  discovery["device"]["connections"][0][0] = "mac";
+  discovery["device"]["connections"][0][1] = WiFi.macAddress();
+  discovery["unique_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicDayHour, "", "", "", "");
+  discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicDayHour, "", "", "", "");
+  discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
+  discovery["entity_category"] = "config";
+  discovery["name"] = "Day Start Hour";
+  discovery["icon"] = "mdi:weather-sunny";
+  discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDayHour, "", "");
+  discovery["command_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDayHour, "/set", "");
+  discovery["command_template"] = "{\"state\":{{value}}}";
+  discovery["value_template"] = "{{ value_json.state }}";
+  discovery["min"] = 0;
+  discovery["max"] = 23;
+  discovery["step"] = 1;
+  discovery["mode"] = "slider";
+  discovery["unit_of_measurement"] = "h";
+
+  delay(150);
+  if (!MQTTPublish(concat7_into(outbuf, "homeassistant/number/", UniqueDeviceName, "/", TopicDayHour, "/config", "", ""), &discovery, MQTT_HOME_ASSISTANT_RETAIN_DISCOVERY_MESSAGES))
+    return false;
+#endif // DIMMING
 
   // --- End SB Custom ---
   discovery.clear();

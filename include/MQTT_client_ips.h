@@ -76,6 +76,17 @@ extern bool MQTTCommandBreathBpmReceived;
 extern float MQTTCommandRainbowSec;
 extern bool MQTTCommandRainbowSecReceived;
 
+#ifdef DIMMING
+extern bool MQTTCommandDimEnabled;
+extern bool MQTTCommandDimEnabledReceived;
+extern uint8_t MQTTCommandDimIntensity;
+extern bool MQTTCommandDimIntensityReceived;
+extern uint8_t MQTTCommandNightHour;
+extern bool MQTTCommandNightHourReceived;
+extern uint8_t MQTTCommandDayHour;
+extern bool MQTTCommandDayHourReceived;
+#endif
+
 // Status to server.
 extern bool MQTTStatusMainPower;
 extern bool MQTTStatusBackPower;
@@ -93,6 +104,13 @@ extern bool MQTTStatusBlankZeroHours;
 extern uint8_t MQTTStatusPulseBpm;
 extern uint8_t MQTTStatusBreathBpm;
 extern float MQTTStatusRainbowSec;
+
+#ifdef DIMMING
+extern bool MQTTStatusDimEnabled;
+extern uint8_t MQTTStatusDimIntensity;
+extern uint8_t MQTTStatusNightHour;
+extern uint8_t MQTTStatusDayHour;
+#endif
 
 bool MQTTStart(bool restart);
 void MQTTLoopFrequently();

@@ -90,9 +90,10 @@ public:
   void adjustIntensity(int16_t adj);
   uint8_t getIntensity() { return config->intensity; }
 
-  void setDimming(bool dim)
+  void setDimming(bool dim, uint8_t intensity = BACKLIGHT_DIMMED_INTENSITY)
   {
     dimming = dim;
+    dimming_intensity = intensity;
     pattern_needs_init = true;
   }
 
@@ -107,6 +108,7 @@ public:
 
 private:
   bool dimming = false;
+  uint8_t dimming_intensity = BACKLIGHT_DIMMED_INTENSITY;
   bool pattern_needs_init;
   bool off;
 

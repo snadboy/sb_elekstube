@@ -64,6 +64,15 @@ public:
       char password[str_buffer_size];
       uint8_t WPS_connected; // Write StoredConfig::valid here when valid data is loaded.
     } wifi;
+
+    struct Dimming
+    {
+      bool enabled;
+      uint8_t night_intensity;      // TFT dimmed value 0..255
+      uint8_t night_start_hour;     // 0..23
+      uint8_t day_start_hour;       // 0..23
+      uint8_t is_valid;
+    } dimming;
   } config;
 
   const static uint8_t valid = 0x55; // neither 0x00 nor 0xFF, signaling loaded config isn't just default data.
