@@ -1541,7 +1541,7 @@ bool MQTTReportDiscovery()
   discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicNightHour, "", "", "", "");
   discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
   discovery["entity_category"] = "config";
-  discovery["name"] = "Night Start Hour";
+  discovery["name"] = "Dim Start Hour";
   discovery["icon"] = "mdi:weather-night";
   discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicNightHour, "", "");
   discovery["command_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicNightHour, "/set", "");
@@ -1571,7 +1571,7 @@ bool MQTTReportDiscovery()
   discovery["object_id"] = concat7_into(outbuf, UniqueDeviceName, "_", TopicDayHour, "", "", "", "");
   discovery["availability_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", MQTT_ALIVE_TOPIC, "", "");
   discovery["entity_category"] = "config";
-  discovery["name"] = "Day Start Hour";
+  discovery["name"] = "Dim Stop Hour";
   discovery["icon"] = "mdi:weather-sunny";
   discovery["state_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDayHour, "", "");
   discovery["command_topic"] = concat7_into(outbuf, MQTT_ROOT_TOPIC, "/", UniqueDeviceName, "/", TopicDayHour, "/set", "");
